@@ -180,14 +180,18 @@ class Tables(sqlContext: SQLContext, scaleFactor: Int) extends Serializable {
       }
       if (iceberg) {
         writer.format("iceberg").mode(mode)
+        if (partitionColumns.nonEmpty) {
+          writer.partitionBy(partitionColumns : _*)
+        }
+        // For Iceberg tables with catalog identifiers, use saveAsTable instead of save
+        writer.saveAsTable(location)
       } else {
         writer.format(format).mode(mode)
+        if (partitionColumns.nonEmpty) {
+          writer.partitionBy(partitionColumns : _*)
+        }
+        writer.save(location)
       }
-
-      if (partitionColumns.nonEmpty) {
-        writer.partitionBy(partitionColumns : _*)
-      }
-      writer.save(location)
       sqlContext.dropTempTable(tempTableName)
     }
 
@@ -238,6 +242,11 @@ class Tables(sqlContext: SQLContext, scaleFactor: Int) extends Serializable {
       if (tablesToBeGenerated.isEmpty) {
         throw new RuntimeException("Bad table name filter: " + tableFilter)
       }
+    }
+
+    // Create the database for Iceberg catalog if it doesn't exist
+    if (iceberg) {
+      sqlContext.sql(s"CREATE DATABASE IF NOT EXISTS hadoop_catalog.${icebergDatabase}")
     }
 
     val withSpecifiedDataType = {
