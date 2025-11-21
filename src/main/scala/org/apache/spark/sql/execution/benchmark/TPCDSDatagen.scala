@@ -835,9 +835,9 @@ object TPCDSDatagen {
     if (datagenArgs.iceberg) {
       sparkBuilder
         .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-        .config(s"spark.sql.catalog.hadoop_catalog", "org.apache.iceberg.spark.SparkCatalog")
-        .config(s"spark.sql.catalog.hadoop_catalog.type", "hadoop")
-        .config(s"spark.sql.catalog.hadoop_catalog.warehouse", datagenArgs.outputLocation)
+        .config(s"spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
+        .config(s"spark.sql.catalog.local.type", "hive")
+        .config(s"spark.sql.catalog.local.warehouse", datagenArgs.outputLocation)
     }
 
     val sparkSession = sparkBuilder.getOrCreate()
