@@ -244,9 +244,9 @@ class Tables(sqlContext: SQLContext, scaleFactor: Int) extends Serializable {
       }
     }
 
-    // Create the database for Iceberg catalog if it doesn't exist
+    // Create the namespace for Iceberg catalog if it doesn't exist
     if (iceberg) {
-      sqlContext.sql(s"CREATE DATABASE IF NOT EXISTS hadoop_catalog.${icebergDatabase}")
+      sqlContext.sql(s"CREATE NAMESPACE IF NOT EXISTS hadoop_catalog.${icebergDatabase}")
     }
 
     val withSpecifiedDataType = {
@@ -258,7 +258,7 @@ class Tables(sqlContext: SQLContext, scaleFactor: Int) extends Serializable {
 
     withSpecifiedDataType.foreach { table =>
       val tableLocation = if (iceberg) {
-        s"hadoop_catalog.${icebergDatabase}.${table.name}"
+        s"spark_catalog.${icebergDatabase}.${table.name}"
       } else {
         s"$location/${table.name}"
       }
@@ -835,9 +835,9 @@ object TPCDSDatagen {
     if (datagenArgs.iceberg) {
       sparkBuilder
         .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-        .config(s"spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
-        .config(s"spark.sql.catalog.local.type", "hive")
-        .config(s"spark.sql.catalog.local.warehouse", datagenArgs.outputLocation)
+        .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkCatalog")
+        .config("spark.sql.catalog.spark_catalog.type", "hadoop")
+        .config("spark.sql.catalog.spark_catalog.warehouse", datagenArgs.outputLocation)
     }
 
     val sparkSession = sparkBuilder.getOrCreate()
