@@ -1,0 +1,48 @@
+# Configuration for auto-assign action
+# See https://github.com/kentaro-m/auto-assign-action
+
+# Add reviewers to pull requests
+addReviewers: true
+
+# Add assignees to pull requests
+addAssignees: false
+
+# A list of reviewers to be added to pull requests (GitHub user name)
+reviewers:
+  - reviewer1
+  - reviewer2
+
+# A number of reviewers added to the pull request
+numberOfReviewers: 1
+
+# A list of assignees, overrides reviewers if set
+# assignees:
+#   - assignee1
+
+# A number of assignees to add to the pull request
+# numberOfAssignees: 1
+
+# A list of keywords to be skipped the process that add reviewers if pull requests include it
+skipKeywords:
+  - wip
+  - WIP
+  - '[WIP]'
+  - 'do not review'
+
+# File path patterns to determine reviewers based on changed files
+# Example:
+# useReviewGroups: true
+# reviewGroups:
+#   scala-code:
+#     - '**/*.scala'
+#   build-config:
+#     - '**/pom.xml'
+#     - 'build/**'
+#   documentation:
+#     - '**/*.md'
+#   workflows:
+#     - '.github/workflows/**'
+
+useReviewGroups: false
+# reviewGroups: {}
+

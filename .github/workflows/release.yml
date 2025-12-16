@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  build-release:
+    name: Build Release Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in pom.xml
+        run: |
+          VERSION_NUMBER="${{ steps.version.outputs.version_number }}"
+          ./build/mvn versions:set -DnewVersion=${VERSION_NUMBER}
+
+      - name: Build release package
+        run: |
+          ./build/mvn clean package -DskipTests
+
+      - name: Run tests
+        run: ./build/mvn test
+
+      - name: Create release directory
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_DIR="iceberg-spark-tpcds-benchmark-${VERSION}"
+          mkdir -p ${RELEASE_DIR}
+          
+          # Copy artifacts
+          cp target/iceberg-spark-tpcds-benchmark-*-with-dependencies.jar ${RELEASE_DIR}/
+          cp -r bin ${RELEASE_DIR}/
+          cp README.md ${RELEASE_DIR}/
+          cp LICENSE ${RELEASE_DIR}/
+          cp QUICK_START.md ${RELEASE_DIR}/ 2>/dev/null || true
+          cp ICEBERG_USAGE_GUIDE.md ${RELEASE_DIR}/ 2>/dev/null || true
+          
+          # Create archives
+          tar -czf ${RELEASE_DIR}.tar.gz ${RELEASE_DIR}
+          zip -r ${RELEASE_DIR}.zip ${RELEASE_DIR}
+          
+          # Generate checksums
+          sha256sum ${RELEASE_DIR}.tar.gz > ${RELEASE_DIR}.tar.gz.sha256
+          sha256sum ${RELEASE_DIR}.zip > ${RELEASE_DIR}.zip.sha256
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cat > release_notes.md << 'EOF'
+          ## Iceberg Spark TPC-DS Benchmark ${{ steps.version.outputs.version }}
+          
+          ### Features
+          - TPC-DS data generation for Apache Spark 3.5.1
+          - Support for Iceberg tables with Hadoop catalog
+          - S3, HDFS, and local filesystem support
+          - Partitioned table generation
+          - Configurable scale factors (1GB to 1TB+)
+          - TPC-DS query benchmarking
+          
+          ### Installation
+          
+          1. Download and extract the release archive
+          2. Set `SPARK_HOME` environment variable
+          3. Configure AWS credentials (if using S3)
+          4. Run `./bin/dsdgen --help` for usage
+          
+          ### Quick Start
+          
+          ```bash
+          # Set Spark home
+          export SPARK_HOME=/path/to/spark-3.3.2
+          
+          # Generate Iceberg tables
+          ./bin/dsdgen \
+            --output-location s3a://your-bucket/warehouse \
+            --scale-factor 1 \
+            --iceberg \
+            --partition-tables
+          ```
+          
+          See `QUICK_START.md` and `ICEBERG_USAGE_GUIDE.md` for detailed documentation.
+          
+          ### Checksums
+          
+          Verify downloads with SHA256:
+          ```bash
+          sha256sum -c iceberg-spark-tpcds-benchmark-${VERSION}.tar.gz.sha256
+          sha256sum -c iceberg-spark-tpcds-benchmark-${VERSION}.zip.sha256
+          ```
+          
+          ### Requirements
+          - Java 8 or 11
+          - Apache Spark 3.3.2+
+          - Scala 2.12
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            iceberg-spark-tpcds-benchmark-*.tar.gz
+            iceberg-spark-tpcds-benchmark-*.tar.gz.sha256
+            iceberg-spark-tpcds-benchmark-*.zip
+            iceberg-spark-tpcds-benchmark-*.zip.sha256
+            target/iceberg-spark-tpcds-benchmark-*-with-dependencies.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-packages
+          path: |
+            iceberg-spark-tpcds-benchmark-*.tar.gz
+            iceberg-spark-tpcds-benchmark-*.zip
+            *.sha256
+          retention-days: 30
+
