@@ -1,0 +1,175 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  schedule:
+    - cron: '0 2 * * *' # Daily at 2 AM UTC
+
+jobs:
+  integration-test-local:
+    name: Integration Test (Local FileSystem)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Download and setup Spark
+        run: |
+          SPARK_VERSION=3.5.1
+          SPARK_DIR=spark-${SPARK_VERSION}-bin-hadoop3
+          
+          # Download Spark
+          wget -q https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_DIR}.tgz
+          tar xzf ${SPARK_DIR}.tgz
+          
+          # Set SPARK_HOME
+          echo "SPARK_HOME=$(pwd)/${SPARK_DIR}" >> $GITHUB_ENV
+
+      - name: Build project
+        run: ./build/mvn clean package -DskipTests
+
+      - name: Test data generation (Parquet)
+        run: |
+          ./bin/dsdgen \
+            --output-location /tmp/tpcds-parquet \
+            --scale-factor 1 \
+            --format parquet \
+            --table-filter "customer,store_sales" \
+            --num-partitions 2
+
+      - name: Test data generation (Iceberg)
+        run: |
+          ./bin/dsdgen \
+            --output-location /tmp/tpcds-iceberg \
+            --scale-factor 1 \
+            --iceberg \
+            --table-filter "customer,store_sales" \
+            --num-partitions 2
+
+      - name: Verify generated data
+        run: |
+          echo "Checking Parquet output..."
+          test -d /tmp/tpcds-parquet/customer || exit 1
+          test -d /tmp/tpcds-parquet/store_sales || exit 1
+          
+          echo "Checking Iceberg output..."
+          test -d /tmp/tpcds-iceberg/tpcds/customer || exit 1
+          test -d /tmp/tpcds-iceberg/tpcds/store_sales || exit 1
+          
+          echo "Integration tests passed!"
+
+      - name: Upload test data samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-data
+          path: |
+            /tmp/tpcds-parquet/customer/
+            /tmp/tpcds-iceberg/tpcds/customer/metadata/
+          retention-days: 3
+
+  integration-test-docker:
+    name: Integration Test (Docker with MinIO S3)
+    runs-on: ubuntu-latest
+
+    services:
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        volumes:
+          - /tmp/minio-data:/data
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Download and setup Spark
+        run: |
+          SPARK_VERSION=3.5.1
+          SPARK_DIR=spark-${SPARK_VERSION}-bin-hadoop3
+          
+          wget -q https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_DIR}.tgz
+          tar xzf ${SPARK_DIR}.tgz
+          
+          echo "SPARK_HOME=$(pwd)/${SPARK_DIR}" >> $GITHUB_ENV
+
+      - name: Setup MinIO client and create bucket
+        run: |
+          # Install MinIO client
+          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+          
+          # Configure MinIO
+          ./mc alias set myminio http://localhost:9000 minioadmin minioadmin
+          
+          # Create test bucket
+          ./mc mb myminio/test-bucket
+          ./mc ls myminio
+
+      - name: Build project
+        run: ./build/mvn clean package -DskipTests
+
+      - name: Test S3 data generation with MinIO
+        env:
+          AWS_ACCESS_KEY_ID: minioadmin
+          AWS_SECRET_ACCESS_KEY: minioadmin
+        run: |
+          # Configure S3A for MinIO
+          export SPARK_CONF="--conf spark.hadoop.fs.s3a.endpoint=http://localhost:9000 \
+                             --conf spark.hadoop.fs.s3a.access.key=minioadmin \
+                             --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
+                             --conf spark.hadoop.fs.s3a.path.style.access=true \
+                             --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem"
+          
+          # Generate Iceberg tables to S3
+          ./bin/dsdgen \
+            --output-location s3a://test-bucket/tpcds-iceberg \
+            --scale-factor 1 \
+            --iceberg \
+            --table-filter "customer" \
+            --num-partitions 2
+
+      - name: Verify S3 data
+        run: |
+          ./mc ls myminio/test-bucket/tpcds-iceberg/ --recursive
+          
+          # Check if data was created
+          if ./mc ls myminio/test-bucket/tpcds-iceberg/tpcds/customer/ | grep -q "metadata"; then
+            echo "S3 integration test passed!"
+          else
+            echo "S3 integration test failed!"
+            exit 1
+          fi
+

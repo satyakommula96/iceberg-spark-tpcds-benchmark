@@ -1,0 +1,41 @@
+# Label configuration for PR auto-labeling
+# See https://github.com/actions/labeler
+
+# Scala source code changes
+scala:
+  - 'src/main/scala/**/*.scala'
+  - 'src/test/scala/**/*.scala'
+
+# Build configuration
+build:
+  - 'pom.xml'
+  - 'build/**'
+  - 'scalastyle-config.xml'
+
+# Documentation
+documentation:
+  - '**/*.md'
+  - 'docs/**'
+
+# Workflows and CI/CD
+ci:
+  - '.github/workflows/**'
+  - '.github/**/*.yml'
+
+# Scripts
+scripts:
+  - 'bin/**'
+
+# Tests
+tests:
+  - 'src/test/**'
+
+# Resources
+resources:
+  - 'src/main/resources/**'
+  - 'src/test/resources/**'
+
+# Dependencies
+dependencies:
+  - 'pom.xml'
+

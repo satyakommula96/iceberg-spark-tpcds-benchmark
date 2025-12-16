@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/YOUR_ORG/iceberg-spark-tpcds-benchmark/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📚 Documentation
+    url: https://github.com/YOUR_ORG/iceberg-spark-tpcds-benchmark/blob/main/README.md
+    about: Read the project documentation
+  - name: 🚀 Quick Start Guide
+    url: https://github.com/YOUR_ORG/iceberg-spark-tpcds-benchmark/blob/main/QUICK_START.md
+    about: Get started quickly with examples
+  - name: 📖 Iceberg Usage Guide
+    url: https://github.com/YOUR_ORG/iceberg-spark-tpcds-benchmark/blob/main/ICEBERG_USAGE_GUIDE.md
+    about: Detailed guide for Iceberg table creation
+

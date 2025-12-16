@@ -1,0 +1,157 @@
+name: Code Quality
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sunday
+
+jobs:
+  scalastyle:
+    name: Scalastyle Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run Scalastyle
+        run: ./build/mvn scalastyle:check
+
+      - name: Upload Scalastyle results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scalastyle-results
+          path: target/scalastyle-output.xml
+          retention-days: 7
+
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run dependency check
+        run: |
+          ./build/mvn dependency:tree
+          ./build/mvn dependency:analyze
+        continue-on-error: true
+
+  license-check:
+    name: License Header Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check license headers
+        run: |
+          # Check Scala files
+          echo "Checking Scala files for Apache license headers..."
+          find src -name "*.scala" | while read file; do
+            if ! grep -q "Licensed to the Apache Software Foundation" "$file"; then
+              echo "Missing license header: $file"
+            fi
+          done
+          
+          # Check shell scripts
+          echo "Checking shell scripts for Apache license headers..."
+          find bin -type f | while read file; do
+            if ! grep -q "Licensed to the Apache Software Foundation" "$file"; then
+              echo "Missing license header: $file"
+            fi
+          done
+        continue-on-error: true
+
+  build-documentation:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Generate Scaladoc
+        run: ./build/mvn scala:doc
+
+      - name: Check documentation files
+        run: |
+          echo "Checking for documentation files..."
+          test -f README.md || echo "WARNING: README.md missing"
+          test -f QUICK_START.md || echo "WARNING: QUICK_START.md missing"
+          test -f ICEBERG_USAGE_GUIDE.md || echo "WARNING: ICEBERG_USAGE_GUIDE.md missing"
+
+      - name: Upload Scaladoc
+        uses: actions/upload-artifact@v4
+        with:
+          name: scaladoc
+          path: target/site/scaladocs/
+          retention-days: 7
+
+  code-metrics:
+    name: Code Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Count lines of code
+        run: |
+          echo "## Code Metrics" > metrics.txt
+          echo "" >> metrics.txt
+          echo "### Lines of Code" >> metrics.txt
+          echo "\`\`\`" >> metrics.txt
+          echo "Scala files:" >> metrics.txt
+          find src -name "*.scala" | xargs wc -l | tail -1 >> metrics.txt
+          echo "" >> metrics.txt
+          echo "Shell scripts:" >> metrics.txt
+          find bin -type f | xargs wc -l 2>/dev/null | tail -1 >> metrics.txt
+          echo "" >> metrics.txt
+          echo "Total source files:" >> metrics.txt
+          find src -type f | wc -l >> metrics.txt
+          echo "\`\`\`" >> metrics.txt
+          cat metrics.txt
+
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-metrics
+          path: metrics.txt
+          retention-days: 30
+
